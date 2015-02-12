@@ -108,7 +108,7 @@ ConnectToServer(VOID)
     ULONG attempts;
     PWCHAR ServerName;
 
-    ServerName = WUSTR_AppenLogonSessionW(NULL, SERVER_NAME);
+    ServerName = WUSTR_AppendLogonSessionW(NULL, SERVER_NAME);
     if (!ServerName)
         return FALSE;
 
