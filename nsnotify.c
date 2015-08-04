@@ -365,7 +365,7 @@ static INIT_ENTRY InitArr[] =
 };
 
 PVOID
-NSAPI
+NTAPI
 RegisterNotificationRoutine(
     __in PNOTIFICATION_ROUTINE Routine,
     __in NOTIFICATION_TYPE Type,
@@ -418,7 +418,7 @@ RegisterNotificationRoutine(
 }
 
 VOID
-NSAPI
+NTAPI
 UnregisterNotificationRoutine(
     __inout PVOID Routine
     )
@@ -449,7 +449,7 @@ UnregisterNotificationRoutine(
 }
 
 BOOL
-NSAPI
+NTAPI
 RegisterThreadForNotification(VOID)
 {
     return RegisterThreadTerminatePort(hPort);
