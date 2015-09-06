@@ -198,7 +198,7 @@ NotificationThreadProc(
 {
     for (;;)
     {
-        CURRENT_THREAD_NAME("Notifiction Thread");
+        CURRENT_THREAD_NAME("Notifiction Server Thread");
 
         if (Terminated)
         {
