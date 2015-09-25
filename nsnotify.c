@@ -55,7 +55,9 @@ DllMain(
 
     case DLL_PROCESS_DETACH:
         if (hPort)
+        {
             CloseHandle(hPort);
+        }
 
         FinalizeRefEntryList(&EntryList);
         break;
@@ -79,17 +81,16 @@ StartServer(VOID)
 
     /* Start the server */
     si.cb = sizeof(si);
-    success = CreateProcessW(
-        NULL,
-        ntfysvr,
-        NULL,
-        NULL,
-        FALSE,
-        0,
-        NULL,
-        NULL,
-        &si,
-        &pi);
+    success = CreateProcessW(NULL,
+                             ntfysvr,
+                             NULL,
+                             NULL,
+                             FALSE,
+                             0,
+                             NULL,
+                             NULL,
+                             &si,
+                             &pi);
     LocalFree(ntfysvr);
     if (success)
     {
@@ -116,15 +117,14 @@ ConnectToServer(VOID)
     do
     {
         /* Try to connect to the server */
-        hPort = SecureConnectPortW(
-            ServerName,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            &MaxMsgSize,
-            NULL,
-            NULL);
+        hPort = SecureConnectPortW(ServerName,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &MaxMsgSize,
+                                   NULL,
+                                   NULL);
         if (hPort)
             break;
 
@@ -138,7 +138,10 @@ ConnectToServer(VOID)
         }
         else
         {
-            if (!IsDebuggerPresent()) attempts++;
+            if (!IsDebuggerPresent())
+            {
+                attempts++;
+            }
         }
 
         /* Try to give the server process time to prepare */
@@ -174,19 +177,17 @@ NotificationAPC(
 
         if (Connection->Types & packet->Type)
         {
-            Connection->Routine(
-                Connection->Param,
-                packet->Type,
-                packet->Param1,
-                packet->Param2);
+            Connection->Routine(Connection->Param,
+                                packet->Type,
+                                packet->Param1,
+                                packet->Param2);
         }
     }
 
-    VirtualFreeEx(
-        GetCurrentProcess(),
-        packet,
-        0,
-        MEM_RELEASE);
+    VirtualFreeEx(GetCurrentProcess(),
+                  packet,
+                  0,
+                  MEM_RELEASE);
 }
 
 static
