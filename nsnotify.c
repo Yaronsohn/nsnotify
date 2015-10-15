@@ -30,7 +30,7 @@ typedef struct _NSNOTIFY_CONNECTION {
     PVOID Param;
 } NSNOTIFY_CONNECTION, *PNSNOTIFY_CONNECTION;
 
-#define CONNECTION_TAG  TAG32('N', 'T', 'F', 'Y')
+#define CONNECTION_TAG  'YFTN'
 
 #define ALLOC(size) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size)
 #define FREE(ptr) HeapFree(GetProcessHeap(), 0, ptr)
