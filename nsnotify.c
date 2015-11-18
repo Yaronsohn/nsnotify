@@ -158,7 +158,7 @@ static
 VOID
 CALLBACK
 NotificationAPC(
-    __in ULONG_PTR Parameter
+    _In_ ULONG_PTR Parameter
     )
 {
     PNOTIFICATION_PACKET packet = (PNOTIFICATION_PACKET) Parameter;
@@ -213,7 +213,7 @@ NotificationThreadProc(
 static
 BOOL
 CallServer(
-    __inout PNSNOTIFY_REQUEST Request
+    _Inout_ PNSNOTIFY_REQUEST Request
     )
 {
     Request->PortMessage.u1.TotalLength = sizeof(NSNOTIFY_REQUEST);
@@ -239,8 +239,8 @@ CallServer(
 static
 BOOLEAN
 InitializeServer(
-    __in BOOLEAN Init,
-    __inout PINIT_ENTRY InitEntry
+    _In_ BOOLEAN Init,
+    _Inout_ PINIT_ENTRY InitEntry
     )
 {
     BOOLEAN success = FALSE;
@@ -319,8 +319,8 @@ leave0:
 static
 BOOLEAN
 InitGeneric(
-    __in BOOLEAN Init,
-    __inout PINIT_ENTRY InitEntry
+    _In_ BOOLEAN Init,
+    _Inout_ PINIT_ENTRY InitEntry
     )
 {
     NSNOTIFY_REQUEST request;
@@ -368,9 +368,9 @@ static INIT_ENTRY InitArr[] =
 PVOID
 NTAPI
 RegisterNotificationRoutine(
-    __in PNOTIFICATION_ROUTINE Routine,
-    __in NOTIFICATION_TYPE Type,
-    __in PVOID Param
+    _In_ PNOTIFICATION_ROUTINE Routine,
+    _In_ NOTIFICATION_TYPE Type,
+    _In_ PVOID Param
     )
 {
     PNSNOTIFY_CONNECTION Connection;
@@ -421,7 +421,7 @@ RegisterNotificationRoutine(
 VOID
 NTAPI
 UnregisterNotificationRoutine(
-    __inout PVOID Routine
+    _Inout_ PVOID Routine
     )
 {
     PNSNOTIFY_CONNECTION Connection = (PNSNOTIFY_CONNECTION) Routine;
