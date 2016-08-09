@@ -48,9 +48,9 @@ DllMain(
     case DLL_PROCESS_ATTACH:
 
         /* disable thread attached/detached notifications */
-        DisableThreadLibraryCalls((HMODULE) hinstDLL);
+        DisableThreadLibraryCalls((HMODULE)hinstDLL);
 
-        InitializeRefEntryList(&EntryList);
+        InitializeRefEntryList(&EntryList, NULL);
         break;
 
     case DLL_PROCESS_DETACH:
