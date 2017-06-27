@@ -10,6 +10,8 @@
 #include <apps\ntfysvr\notify.h>
 #include <imgbase.h>
 #include <winutils.h>
+#include <nsutils.h>
+#include <ntextapi.h>
 
 /* GLOBALS ********************************************************************/
 
@@ -47,8 +49,8 @@ DllMain(
     {
     case DLL_PROCESS_ATTACH:
 
-        /* disable thread attached/detached notifications */
-        DisableThreadLibraryCalls((HMODULE)hinstDLL);
+        /* Disable thread attached/detached notifications */
+        LdrDiDisableThreadLibraryCalls(hinstDLL);
 
         InitializeRefEntryList(&EntryList, NULL);
         break;
@@ -75,7 +77,7 @@ StartServer(VOID)
     STARTUPINFOW si = { 0 };
     PROCESS_INFORMATION pi = { 0 };
 
-    ntfysvr = PrependModulePathW((HMODULE) &__ImageBase, ServerName);
+    ntfysvr = PrependModulePathW((HMODULE)&__ImageBase, ServerName);
     if (!ntfysvr)
         return GetLastError();
 
@@ -219,10 +221,9 @@ CallServer(
     Request->PortMessage.u1.TotalLength = sizeof(NSNOTIFY_REQUEST);
     Request->PortMessage.u2.ZeroInit = 0;
 
-    if (!RequestWaitReplyPort(
-        hPort,
-        &Request->PortMessage,
-        &Request->PortMessage))
+    if (!RequestWaitReplyPort(hPort,
+                              &Request->PortMessage,
+                              &Request->PortMessage))
     {
         return FALSE;
     }
@@ -248,31 +249,30 @@ InitializeServer(
 
     if (Init)
     {
-        /* check if we need to initialize */
+        /* Check if we need to initialize */
         if (!InitCtrlInitialize(&InitEntry->InitCtrl, NULL, NULL))
             return TRUE;
 
-        /* connect to the notification server */
+        /* Connect to the notification server */
         if (!ConnectToServer())
             goto leave0;
 
         /* Make sure the flag is off */
         Terminated = FALSE;
 
-        /* create the dispatcher thread */
-        hNotificationThread = CreateThread(
-            NULL,
-            0,
-            NotificationThreadProc,
-            NULL,
-            CREATE_SUSPENDED,
-            NULL);
+        /* Create the dispatcher thread */
+        hNotificationThread = CreateThread(NULL,
+                                           0,
+                                           NotificationThreadProc,
+                                           NULL,
+                                           CREATE_SUSPENDED,
+                                           NULL);
         if (!hNotificationThread)
             goto cleanup1;
 
         request.u1.Type = NOTIFY_HANDSHAKE;
         request.u2.Handshake.Routine = NotificationAPC;
-        request.u2.Handshake.hThread = hNotificationThread;
+        request.u2.Handshake.ThreadHandle = hNotificationThread;
 
         if (!CallServer(&request))
         {
@@ -404,7 +404,9 @@ RegisterNotificationRoutine(
                 while (i--)
                 {
                     if (InitArr[i].Type & Type)
+                    {
                         InitArr[i].InitRoutine(FALSE, &InitArr[i]);
+                    }
                 }
 
                 FREE(Connection);
