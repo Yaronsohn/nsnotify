@@ -50,7 +50,7 @@ DllMain(
     case DLL_PROCESS_ATTACH:
 
         /* Disable thread attached/detached notifications */
-        LdrDiDisableThreadLibraryCalls(hinstDLL);
+        LdrDisableThreadCalloutsForDll(hinstDLL);
 
         InitializeRefEntryList(&EntryList, NULL);
         break;
@@ -417,7 +417,7 @@ RegisterNotificationRoutine(
 
     /* All is ready insert the entry to start receive notifications */
     InsertRefEntry(&EntryList, &Connection->RefEntry);
-    return (PVOID) Connection;
+    return (PVOID)Connection;
 }
 
 VOID

@@ -67,7 +67,7 @@
       <MinimalRebuild>true</MinimalRebuild>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>nsutils.lib;ntextapi.lib;winutils.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>nsutils.lib;ntextapi.lib;winutils.lib;ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -76,7 +76,7 @@
       <MinimalRebuild>true</MinimalRebuild>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>nsutils.lib;ntextapi.lib;winutils.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>nsutils.lib;ntextapi.lib;winutils.lib;ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent />
   </ItemDefinitionGroup>
@@ -86,7 +86,7 @@
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>nsutils.lib;ntextapi.lib;winutils.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>nsutils.lib;ntextapi.lib;winutils.lib;ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -95,7 +95,7 @@
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>nsutils.lib;ntextapi.lib;winutils.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>nsutils.lib;ntextapi.lib;winutils.lib;ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
