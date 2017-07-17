@@ -9,24 +9,25 @@
 #include <windows.h>
 #include <apps\ntfysvr\notify.h>
 #include <imgbase.h>
+#include <ntrtl.h>
+#include <ntextapi.h>
 #include <winutils.h>
 #include <nsutils.h>
-#include <ntextapi.h>
 
 /* GLOBALS ********************************************************************/
 
-static REFENTRY_LIST EntryList = { 0 };
-static HANDLE hPort = 0;
+static RTL_REFENTRY_LIST EntryList = { 0 };
+static HANDLE PortHandle = 0;
 static const WCHAR ServerName[] =
     { 'N', 'T', 'F', 'Y', 'S', 'V', 'R', '.', 'E', 'X', 'E', 0 };
-static HANDLE hNotificationThread = 0;
+static HANDLE NotifyThreadHandle = 0;
 static BOOL Terminated = FALSE;
 
 /* FUNCTIONS ******************************************************************/
 
 typedef struct _NSNOTIFY_CONNECTION {
     ULONG Signature;
-    REFENTRY RefEntry;
+    RTL_REFENTRY RefEntry;
     NOTIFICATION_TYPE Types;
     PNOTIFICATION_ROUTINE Routine;
     PVOID Param;
@@ -34,8 +35,8 @@ typedef struct _NSNOTIFY_CONNECTION {
 
 #define CONNECTION_TAG  'YFTN'
 
-#define ALLOC(size) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size)
-#define FREE(ptr) HeapFree(GetProcessHeap(), 0, ptr)
+#define ALLOC(size) RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, size)
+#define FREE(ptr) RtlFreeHeap(RtlGetProcessHeap(), 0, ptr)
 
 BOOL
 WINAPI
@@ -52,16 +53,16 @@ DllMain(
         /* Disable thread attached/detached notifications */
         LdrDisableThreadCalloutsForDll(hinstDLL);
 
-        InitializeRefEntryList(&EntryList, NULL);
+        RtlInitializeRefEntryList(&EntryList, NULL);
         break;
 
     case DLL_PROCESS_DETACH:
-        if (hPort)
+        if (PortHandle)
         {
-            CloseHandle(hPort);
+            NtClose(PortHandle);
         }
 
-        FinalizeRefEntryList(&EntryList);
+        RtlFinalizeRefEntryList(&EntryList);
         break;
     }
 
@@ -96,8 +97,8 @@ StartServer(VOID)
     LocalFree(ntfysvr);
     if (success)
     {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+        NtClose(pi.hProcess);
+        NtClose(pi.hThread);
     }
 
     return success;
@@ -119,15 +120,15 @@ ConnectToServer(VOID)
     do
     {
         /* Try to connect to the server */
-        hPort = SecureConnectPortW(ServerName,
-                                   NULL,
-                                   NULL,
-                                   NULL,
-                                   NULL,
-                                   &MaxMsgSize,
-                                   NULL,
-                                   NULL);
-        if (hPort)
+        PortHandle = SecureConnectPortW(ServerName,
+                                        NULL,
+                                        NULL,
+                                        NULL,
+                                        NULL,
+                                        &MaxMsgSize,
+                                        NULL,
+                                        NULL);
+        if (PortHandle)
             break;
 
         if ((attempts % 10) == 0)
@@ -140,56 +141,61 @@ ConnectToServer(VOID)
         }
         else
         {
-            if (!IsDebuggerPresent())
+            if (!NtCurrentPeb()->BeingDebugged)
             {
                 attempts++;
             }
         }
 
         /* Try to give the server process time to prepare */
-        Sleep(500);
+        NtDelayExecution(FALSE, (PLARGE_INTEGER)&RtlTimeout200MSec);
 
     } while (attempts < 30);
 
     WUSTR_SetPtrW(&ServerName, NULL);
 
-    return hPort != 0;
+    return PortHandle != 0;
 }
 
 static
 VOID
-CALLBACK
+NTAPI
 NotificationAPC(
-    _In_ ULONG_PTR Parameter
+    _In_ PVOID NormalContext,
+    _In_ PVOID SystemArgument1,
+    _In_ PVOID SystemArgument2
     )
 {
-    PNOTIFICATION_PACKET packet = (PNOTIFICATION_PACKET) Parameter;
-    PREFENTRY entry = NULL;
-    PNSNOTIFY_CONNECTION Connection;
+    if (NormalContext)
+    {
+        PNOTIFICATION_PACKET packet = (PNOTIFICATION_PACKET)NormalContext;
+        PRTL_REFENTRY entry = NULL;
+        PNSNOTIFY_CONNECTION Connection;
+        SIZE_T Size;
 
-    if (!packet)
+        while (entry = RtlGetRefEntry(&EntryList, entry))
+        {
+            Connection = CONTAINING_RECORD(entry, NSNOTIFY_CONNECTION, RefEntry);
+
+            if (Connection->Types & packet->Type)
+            {
+                Connection->Routine(Connection->Param,
+                                    packet->Type,
+                                    packet->Param1,
+                                    packet->Param2);
+            }
+        }
+
+        Size = 0;
+        NtFreeVirtualMemory(NtCurrentProcess(),
+                            &packet,
+                            &Size,
+                            MEM_RELEASE);
+    }
+    else
     {
         Terminated = TRUE;
-        return;
     }
-
-    while (entry = GetRefEntry(&EntryList, entry))
-    {
-        Connection = CONTAINING_RECORD(entry, NSNOTIFY_CONNECTION, RefEntry);
-
-        if (Connection->Types & packet->Type)
-        {
-            Connection->Routine(Connection->Param,
-                                packet->Type,
-                                packet->Param1,
-                                packet->Param2);
-        }
-    }
-
-    VirtualFreeEx(GetCurrentProcess(),
-                  packet,
-                  0,
-                  MEM_RELEASE);
 }
 
 static
@@ -205,10 +211,10 @@ NotificationThreadProc(
 
         if (Terminated)
         {
-            TerminateThread(GetCurrentThread(), 0);
+            NtTerminateThread(NtCurrentThread(), 0);
         }
 
-        SleepEx(INFINITE, TRUE);
+        NtDelayExecution(TRUE, (PLARGE_INTEGER)&RtlTimeoutInfinite);
     }
 }
 
@@ -221,7 +227,7 @@ CallServer(
     Request->PortMessage.u1.TotalLength = sizeof(NSNOTIFY_REQUEST);
     Request->PortMessage.u2.ZeroInit = 0;
 
-    if (!RequestWaitReplyPort(hPort,
+    if (!RequestWaitReplyPort(PortHandle,
                               &Request->PortMessage,
                               &Request->PortMessage))
     {
@@ -230,7 +236,7 @@ CallServer(
 
     if (Request->u1.Status)
     {
-        SetLastError(Request->u1.Status);
+        RtlSetLastWin32Error(Request->u1.Status);
         return FALSE;
     }
 
@@ -244,13 +250,13 @@ InitializeServer(
     _Inout_ PINIT_ENTRY InitEntry
     )
 {
-    BOOLEAN success = FALSE;
+    BOOLEAN Success = FALSE;
     NSNOTIFY_REQUEST request;
 
     if (Init)
     {
         /* Check if we need to initialize */
-        if (!InitCtrlInitialize(&InitEntry->InitCtrl, NULL, NULL))
+        if (!RtlInitCtrlInitialize(&InitEntry->InitCtrl, NULL, NULL))
             return TRUE;
 
         /* Connect to the notification server */
@@ -261,18 +267,23 @@ InitializeServer(
         Terminated = FALSE;
 
         /* Create the dispatcher thread */
-        hNotificationThread = CreateThread(NULL,
-                                           0,
-                                           NotificationThreadProc,
-                                           NULL,
-                                           CREATE_SUSPENDED,
-                                           NULL);
-        if (!hNotificationThread)
+        if (!NT_SUCCESS(RtlCreateUserThread(NtCurrentProcess(),
+                                            NULL,
+                                            TRUE,
+                                            0,
+                                            0,
+                                            0,
+                                            NotificationThreadProc,
+                                            NULL,
+                                            &NotifyThreadHandle,
+                                            NULL)))
+        {
             goto cleanup1;
+        }
 
         request.u1.Type = NOTIFY_HANDSHAKE;
         request.u2.Handshake.Routine = NotificationAPC;
-        request.u2.Handshake.ThreadHandle = hNotificationThread;
+        request.u2.Handshake.ThreadHandle = NotifyThreadHandle;
 
         if (!CallServer(&request))
         {
@@ -280,18 +291,18 @@ InitializeServer(
              * We need to terminate the notification thread - since we've kept
              * it suspended we can simply terminate it
              */
-            TerminateThread(hNotificationThread, GetLastError());
+            NtTerminateThread(NotifyThreadHandle, GetLastError());
             goto cleanup2;
         }
 
-        ResumeThread(hNotificationThread);
+        NtResumeThread(NotifyThreadHandle, NULL);
 
-        InitCtrlComplete(&InitEntry->InitCtrl, TRUE);
+        RtlInitCtrlComplete(&InitEntry->InitCtrl, TRUE);
         return TRUE;
     }
     else
     {
-        if (!InitCtrlUninitialize(&InitEntry->InitCtrl, NULL, NULL))
+        if (!RtlInitCtrlUninitialize(&InitEntry->InitCtrl, NULL, NULL))
             return TRUE;
 
         /*
@@ -300,20 +311,24 @@ InitializeServer(
          * queue any additional APC, and because APCs are dispatched
          * first-in first-served style, our APC will be the last
          */
-        QueueUserAPC(NotificationAPC, hNotificationThread, 0);
+        NtQueueApcThread(NotifyThreadHandle,
+                         NotificationAPC,
+                         NULL,
+                         NULL,
+                         NULL);
 
-        WaitForSingleObject(hNotificationThread, INFINITE);
+        WaitForSingleObject(NotifyThreadHandle, INFINITE);
     }
 
 cleanup2:
-    CloseHandle(hNotificationThread);
-    hNotificationThread = 0;
+    NtClose(NotifyThreadHandle);
+    NotifyThreadHandle = 0;
 cleanup1:
-    CloseHandle(hPort);
-    hPort = 0;
+    NtClose(PortHandle);
+    PortHandle = 0;
 leave0:
-    InitCtrlComplete(&InitEntry->InitCtrl, success);
-    return success;
+    RtlInitCtrlComplete(&InitEntry->InitCtrl, Success);
+    return Success;
 }
 
 static
@@ -324,21 +339,21 @@ InitGeneric(
     )
 {
     NSNOTIFY_REQUEST request;
-    BOOLEAN success = FALSE;
+    BOOLEAN Success = FALSE;
 
     if (Init)
     {
-        if (!InitCtrlInitialize(&InitEntry->InitCtrl, NULL, NULL))
+        if (!RtlInitCtrlInitialize(&InitEntry->InitCtrl, NULL, NULL))
             return TRUE;
 
         request.u1.Type = NOTIFY_REGISTER;
         request.u2.Register.Type = InitEntry->Type;
 
-        success = CallServer(&request);
+        Success = CallServer(&request);
     }
     else
     {
-        if (!InitCtrlUninitialize(&InitEntry->InitCtrl, NULL, NULL))
+        if (!RtlInitCtrlUninitialize(&InitEntry->InitCtrl, NULL, NULL))
             return TRUE;
 
         request.u1.Type = NOTIFY_UNREGISTER;
@@ -347,8 +362,8 @@ InitGeneric(
         CallServer(&request);
     }
 
-    InitCtrlComplete(&InitEntry->InitCtrl, success);
-    return success;
+    RtlInitCtrlComplete(&InitEntry->InitCtrl, Success);
+    return Success;
 }
 
 static INIT_ENTRY InitArr[] =
@@ -379,7 +394,7 @@ RegisterNotificationRoutine(
     /* Make sure the caller has asked for at least one notification */
     if ((Type & NotifyAll) == 0)
     {
-        SetLastError(ERROR_INVALID_PARAMETER);
+        RtlSetLastWin32Error(ERROR_INVALID_PARAMETER);
         return NULL;
     }
 
@@ -416,7 +431,7 @@ RegisterNotificationRoutine(
     }
 
     /* All is ready insert the entry to start receive notifications */
-    InsertRefEntry(&EntryList, &Connection->RefEntry);
+    RtlInsertRefEntry(&EntryList, &Connection->RefEntry);
     return (PVOID)Connection;
 }
 
@@ -431,12 +446,12 @@ UnregisterNotificationRoutine(
 
     if (Connection->Signature != CONNECTION_TAG)
     {
-        RaiseException(ERROR_INVALID_PARAMETER, 0, 0, NULL);
+        RtlRaiseStatus(ERROR_INVALID_PARAMETER);
         return;
     }
 
     /* Remove the entry to stop receive notifications */
-    RemoveRefEntry(&Connection->RefEntry);
+    RtlRemoveRefEntry(&Connection->RefEntry);
 
     /* Uninitialize any entry we've previously started */
     for (i = _countof(InitArr) - 1; i >= 0; i--)
@@ -455,5 +470,5 @@ BOOL
 NTAPI
 RegisterThreadForNotification(VOID)
 {
-    return RegisterThreadTerminatePort(hPort);
+    return NT_SUCCESS(NtRegisterThreadTerminatePort(PortHandle));
 }
