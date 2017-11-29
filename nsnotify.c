@@ -53,7 +53,7 @@ DllMain(
         /* Disable thread attached/detached notifications */
         LdrDisableThreadCalloutsForDll(hinstDLL);
 
-        RtlInitializeRefEntryList(&EntryList, NULL);
+        RtlInitializeRefEntryList(&EntryList);
         break;
 
     case DLL_PROCESS_DETACH:
