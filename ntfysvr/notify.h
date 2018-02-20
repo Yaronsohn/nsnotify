@@ -19,7 +19,7 @@ Revision:
 #ifndef _NS_NOTIFY_INT_H_
 #define _NS_NOTIFY_INT_H_
 
-#include <nsnotify.h>
+#include "..\nsnotify.h"
 #include <ntrtl.h>
 
 #ifdef __cplusplus

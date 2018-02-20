@@ -7,7 +7,7 @@
 /* INCLUDES *******************************************************************/
 
 #include <windows.h>
-#include <apps\ntfysvr\notify.h>
+#include "..\ntfysvr\notify.h"
 #include <imgbase.h>
 #include <ntrtl.h>
 #include <ntextapi.h>

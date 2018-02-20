@@ -49,7 +49,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
-  <Import Project="$(SolutionDir)config\Prometheus.API.props" />
+  <Import Condition="Exists('$(SolutionDir)config\Prometheus.API.props')" Project="$(SolutionDir)config\Prometheus.API.props" />
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
@@ -112,7 +112,7 @@
     <ResourceCompile Include="nsnotify.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Import Project="$(SolutionDir)config\PostProject.targets" />
+  <Import Condition="Exists('$(SolutionDir)config\PostProject.targets')" Project="$(SolutionDir)config\PostProject.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

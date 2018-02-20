@@ -46,7 +46,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings" />
-  <Import Project="$(SolutionDir)config\Prometheus.API.props" />
+  <Import Condition="Exists('$(SolutionDir)config\Prometheus.API.props')" Project="$(SolutionDir)config\Prometheus.API.props" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <_ProjectFileVersion>10.0.40219.1</_ProjectFileVersion>
@@ -112,10 +112,5 @@
     <ClCompile Include="wnd.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Import Project="$(SolutionDir)config\PostProject.targets" />
-  <ImportGroup Label="ExtensionTargets">
-    <Import Project="..\..\env\sic.targets" />
-    <Import Project="..\..\env\oc.targets" />
-    <Import Project="..\..\env\MC.targets" />
-  </ImportGroup>
+  <Import Condition="Exists('$(SolutionDir)config\PostProject.targets')" Project="$(SolutionDir)config\PostProject.targets" />
 </Project>
