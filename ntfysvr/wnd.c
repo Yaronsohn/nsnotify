@@ -7,11 +7,9 @@
 #include <windows.h>
 #include "notify.h"
 #include <dbt.h>
-#include <waitmgr.h>
 
 /* GLOBALS ********************************************************************/
 
-static RTL_INIT_CTRL InitCtrl = { 0 };
 static const LPCWSTR PrometheusNotificationWindowClass =
     L"PrometheusNotificationWindowClass";
 
@@ -153,6 +151,12 @@ InitFinNotifyWindow(
         if (!RtlInitCtrlInitialize(&InitEntry->InitCtrl, NULL, NULL))
             return TRUE;
 
+        if (!InitFinMonitorThread(TRUE))
+        {
+            RtlInitCtrlComplete(&InitEntry->InitCtrl, FALSE);
+            return FALSE;
+        }
+
         wcex.cbSize = sizeof(wcex);
         wcex.style = 0;
         wcex.lpfnWndProc = NotifyWndProc;
@@ -162,21 +166,13 @@ InitFinNotifyWindow(
             goto Leave;
 
         /* We need the monitor thread to create the window so queue an APC */
-        if (NT_SUCCESS(NtQueueApcThread(WmGetManagerThread(hWaitManager, NULL),
-                                        CreateNotifyWindowAPC,
-                                        (PVOID)TRUE,
-                                        NULL,
-                                        NULL)))
-        {
-            /* Wait until the monitor thread has created the window */
-            NtWaitForKeyedEvent(NULL, CreateNotifyWindowAPC, FALSE, NULL);
+        QueueMonitorThreadApc(CreateNotifyWindowAPC, (PVOID)TRUE, NULL, NULL);
 
-            /* Make sure the monitor thread had created the window */
-            if (NotifyHwnd)
-            {
-                RtlInitCtrlComplete(&InitEntry->InitCtrl, TRUE);
-                return TRUE;
-            }
+        /* Make sure the monitor thread had created the window */
+        if (NotifyHwnd)
+        {
+            RtlInitCtrlComplete(&InitEntry->InitCtrl, TRUE);
+            return TRUE;
         }
     }
     else
@@ -185,20 +181,20 @@ InitFinNotifyWindow(
             return TRUE;
 
         /* We need to delete the window from the thread that created it */
-        if (NT_SUCCESS(NtQueueApcThread(WmGetManagerThread(hWaitManager, NULL),
-                                        CreateNotifyWindowAPC,
-                                        (PVOID)FALSE,
-                                        NULL,
-                                        NULL)))
-        {
-            /* Wait until the monitor thread has created the window */
-            NtWaitForKeyedEvent(NULL, CreateNotifyWindowAPC, FALSE, NULL);
-        }
+        QueueMonitorThreadApc(CreateNotifyWindowAPC,
+                              (PVOID)FALSE,
+                              NULL,
+                              NULL);
     }
 
     UnregisterClassW(PrometheusNotificationWindowClass, NULL);
 
 Leave:
+    if (!Success)
+    {
+        InitFinMonitorThread(FALSE);
+    }
+
     RtlInitCtrlComplete(&InitEntry->InitCtrl, Success);
     return Success;
 }

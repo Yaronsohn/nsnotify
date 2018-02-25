@@ -10,10 +10,6 @@
 #include "notify.h"
 #include <Wtsapi32.h>
 
-/* GLOBALS ********************************************************************/
-
-static RTL_INIT_CTRL InitCtrl = { 0 };
-
 /* FUNCTIONS ******************************************************************/
 
 BOOLEAN

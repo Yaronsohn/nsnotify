@@ -65,7 +65,7 @@
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ntextapi.lib;waitmgr.lib;wtsapi32.lib;winutils.lib;rtlu.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;probe.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -76,7 +76,7 @@
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ntextapi.lib;waitmgr.lib;wtsapi32.lib;winutils.lib;rtlu.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;probe.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -87,7 +87,7 @@
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ntextapi.lib;waitmgr.lib;wtsapi32.lib;winutils.lib;rtlu.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;probe.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -98,7 +98,7 @@
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ntextapi.lib;waitmgr.lib;wtsapi32.lib;winutils.lib;rtlu.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;probe.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -107,6 +107,7 @@
   <ItemGroup>
     <ClCompile Include="device.c" />
     <ClCompile Include="memory.c" />
+    <ClCompile Include="monitor.c" />
     <ClCompile Include="ntfysvr.c" />
     <ClCompile Include="session.c" />
     <ClCompile Include="wnd.c" />

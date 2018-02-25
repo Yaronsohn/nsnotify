@@ -21,6 +21,7 @@ Revision:
 
 #include "..\nsnotify.h"
 #include <ntrtl.h>
+#include <nsdbg.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,7 +54,7 @@ typedef struct {
     PORT_MESSAGE PortMessage;
     union {
         DWORD Type;
-        LONG Status;
+        NTSTATUS Status;
     } u1;
     union {
         struct {
@@ -77,7 +78,6 @@ typedef struct {
 #define SERVER_NAME     L"NSNOTIFY32"
 #endif
 
-extern HANDLE hWaitManager;
 extern HWND NotifyHwnd;
 extern HINSTANCE hInst;
 
@@ -97,6 +97,35 @@ typedef struct _INIT_ENTRY {
     RTL_INIT_CTRL InitCtrl;
     BOOLEAN (*InitRoutine)(BOOLEAN, struct _INIT_ENTRY *);
 } INIT_ENTRY, *PINIT_ENTRY;
+
+//
+// Monitor Thread
+//
+BOOLEAN
+InitFinMonitorThread(
+    _In_ BOOLEAN Init
+    );
+
+VOID
+QueueMonitorThreadApc(
+    _In_ PKNORMAL_ROUTINE NormalRoutine,
+    _In_ PVOID NormalContext,
+    _In_ PVOID SystemArgument1,
+    _In_ PVOID SystemArgument2
+    );
+
+typedef
+VOID
+(NTAPI *PMONITOR_ROUTINE)(
+    VOID
+    );
+
+VOID
+NTAPI
+AddRemoveMonitoredHandle(
+    _In_ HANDLE Handle,
+    _In_opt_ PMONITOR_ROUTINE Routine
+    );
 
 #ifdef __cplusplus
 }

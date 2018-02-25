@@ -35,5 +35,8 @@
     <ClCompile Include="wnd.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="monitor.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -50,26 +50,26 @@ typedef enum _NOTIFICATION_TYPE {
 typedef
 VOID
 (NTAPI *PNOTIFICATION_ROUTINE)(
-    __in PVOID Param,
-    __in NOTIFICATION_TYPE Type,
-    __in ULONG_PTR Info1,
-    __in ULONG_PTR Info2
+    _In_ PVOID Param,
+    _In_ NOTIFICATION_TYPE Type,
+    _In_ ULONG_PTR Info1,
+    _In_ ULONG_PTR Info2
     );
 
 NSNOTIFYAPI
 PVOID
 NTAPI
 RegisterNotificationRoutine(
-    __in PNOTIFICATION_ROUTINE Routine,
-    __in NOTIFICATION_TYPE Type,
-    __in PVOID Param
+    _In_ PNOTIFICATION_ROUTINE Routine,
+    _In_ NOTIFICATION_TYPE Type,
+    _In_ PVOID Param
     );
 
 NSNOTIFYAPI
 VOID
 NTAPI
 UnregisterNotificationRoutine(
-    __inout PVOID Routine
+    _Inout_ PVOID Routine
     );
 
 NSNOTIFYAPI

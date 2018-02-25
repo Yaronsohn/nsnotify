@@ -10,34 +10,25 @@
 
 #include <windows.h>
 #include "notify.h"
-#include <waitmgr.h>
 #include <AccCtrl.h>
 #include <ntrtlu.h>
-#include <winutils.h>
-#include <ntextapi.h>
+#include <lpccs.h>
 
 /* GLOBALS ********************************************************************/
 
-static RTL_REFENTRY_LIST EntryList = { 0 };
-static ULONG ConnectionCount = 0;
-
+static const UNICODE_STRING LpcServerName = RTL_CONSTANT_STRING(L"\\" SERVER_NAME);
+static LPCSERVER LpcServer = { 0 };
 HINSTANCE hInst = NULL;
-HANDLE hWaitManager = 0;
 
 /* FUNCTIONS ******************************************************************/
 
 typedef struct _NSNOTIFY_CONNECTION {
-    RTL_REFENTRY RefEntry;
-    HANDLE hPort;
     NOTIFICATION_TYPE Types;
     HANDLE ProcessHandle;
     HANDLE ThreadHandle;
     PKNORMAL_ROUTINE Routine;
     USHORT ThreadNumaNode;
 } NSNOTIFY_CONNECTION, *PNSNOTIFY_CONNECTION;
-
-#define ALLOC(size) RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, size)
-#define FREE(ptr) RtlFreeHeap(RtlGetProcessHeap(), 0, ptr)
 
 #define NotifyRequiredWindow \
     (NotifyPolicy | NotifyLocale | NotifyEnvironment | \
@@ -66,7 +57,6 @@ DispatchNotification(
     _In_opt_ SIZE_T Param2Length
     )
 {
-    PRTL_REFENTRY entry = NULL;
     PNSNOTIFY_CONNECTION Connection;
     PNOTIFICATION_PACKET packet;
     SIZE_T PacketSize;
@@ -81,7 +71,7 @@ DispatchNotification(
     PacketSize = sizeof(NOTIFICATION_PACKET) + Param1Length + Param2Length;
 
     /* Allocate a locap*/
-    packet = ALLOC(PacketSize);
+    packet = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, PacketSize);
     if (!packet)
         return;
 
@@ -108,10 +98,9 @@ DispatchNotification(
     SET_PARAM(Param1);
     SET_PARAM(Param2);
 
-    while (entry = RtlGetRefEntry(&EntryList, entry))
+    Connection = NULL;
+    while (Connection = (PNSNOTIFY_CONNECTION)LpcGetNextConnection(&LpcServer, Connection))
     {
-        Connection = CONTAINING_RECORD(entry, NSNOTIFY_CONNECTION, RefEntry);
-
         /*
          * make sure the callback is interested with this kind of
          * notification
@@ -158,11 +147,11 @@ DispatchNotification(
         }
     }
 
-    FREE(packet);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, packet);
 }
 
 static
-BOOL
+BOOLEAN
 FORCEINLINE
 InitNotificationsByMask(
     _In_ NOTIFICATION_TYPE Mask
@@ -211,75 +200,59 @@ UninitNotificationsByMask(
 }
 
 static
-LONG
+NTSTATUS
 Handshake(
     _In_ PNSNOTIFY_CONNECTION Connection,
     _Inout_ PNSNOTIFY_REQUEST Request
     )
 {
     NTSTATUS Status;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    CLIENT_ID ClientId;
-
-    if (Connection->ProcessHandle)
-        return ERROR_INVALID_FUNCTION;
 
     if (!Request->u2.Handshake.Routine
         ||
         RtlIsPsedoHandle(Request->u2.Handshake.ThreadHandle))
     {
-        return ERROR_INVALID_PARAMETER;
+        return STATUS_INVALID_PARAMETER;
     }
-
-    ClientId.UniqueProcess = Request->PortMessage.u3.ClientId.UniqueProcess;
-    ClientId.UniqueThread = 0;
 
     /*
      * Open a handle to the process that sent the message.
      *
      * N.B. this function will fail if NULL is passed for ObjectAttributes
      */
-    InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
-    Status = NtOpenProcess(&Connection->ProcessHandle,
-                           PROCESS_DUP_HANDLE | PROCESS_VM_OPERATION | PROCESS_VM_WRITE,
-                           &ObjectAttributes,
-                           &ClientId);
+    Status = NtDuplicateObject(Connection->ProcessHandle,
+                               Request->u2.Handshake.ThreadHandle,
+                               NtCurrentProcess(),
+                               &Connection->ThreadHandle,
+                               THREAD_SET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION,
+                               0,
+                               0);
     if (NT_SUCCESS(Status))
     {
-        Status = NtDuplicateObject(Connection->ProcessHandle,
-                                   Request->u2.Handshake.ThreadHandle,
-                                   NtCurrentProcess(),
-                                   &Connection->ThreadHandle,
-                                   THREAD_SET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION,
-                                   0,
-                                   0);
+        Status = RtlGetThreadNumaNode(Connection->ThreadHandle, &Connection->ThreadNumaNode);
         if (NT_SUCCESS(Status))
         {
-            Status = RtlGetThreadNumaNode(Connection->ThreadHandle, &Connection->ThreadNumaNode);
-            if (NT_SUCCESS(Status))
-            {
-                Connection->Routine = Request->u2.Handshake.Routine;
-                return ERROR_SUCCESS;
-            }
-
-            NtClose(Connection->ThreadHandle);
+            Connection->Routine = Request->u2.Handshake.Routine;
+            return STATUS_SUCCESS;
         }
 
-        NtClose(Connection->ProcessHandle);
-        Connection->ProcessHandle = 0;
+        NtClose(Connection->ThreadHandle);
     }
 
-    return RtlNtStatusToDosError(Status);
+    return Status;
 }
 
 static
-LONG
+NTSTATUS
 Register(
     _In_ PNSNOTIFY_CONNECTION Connection,
     _Inout_ PNSNOTIFY_REQUEST Request
     )
 {
     NOTIFICATION_TYPE mask = Request->u2.Register.Type;
+
+    if (!Connection->ThreadHandle)
+        return STATUS_NOT_FOUND;
 
     /* The caller can not specify NotifyWindow */
     mask &= ~NotifyWindow;
@@ -296,15 +269,15 @@ Register(
     if (mask)
     {
         if (!InitNotificationsByMask(mask))
-            return GetLastError();
+            return STATUS_UNSUCCESSFUL;
     }
 
     Connection->Types |= mask;
-    return ERROR_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 static
-LONG
+NTSTATUS
 Unregister(
     _In_ PNSNOTIFY_CONNECTION Connection,
     _Inout_ PNSNOTIFY_REQUEST Request
@@ -330,69 +303,120 @@ Unregister(
     Connection->Types &= ~mask;
 
     UninitNotificationsByMask(mask);
-    return ERROR_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 static
-HANDLE
-CreateServerPort(VOID)
+NTSTATUS
+NTAPI
+HandleNewConnection(
+    _Inout_ struct _LPCSERVER *Server,
+    _In_opt_ PNSNOTIFY_REQUEST Request,
+    _Inout_ PNSNOTIFY_CONNECTION Connection
+    )
 {
-    PWCHAR ServerName;
-    PSECURITY_DESCRIPTOR pSD = NULL;
-    SECURITY_ATTRIBUTES sa;
-    EXPLICIT_ACCESSW ea[1];
-    PTOKEN_USER ptu;
-    HANDLE hPort = NULL;
+    OBJECT_ATTRIBUTES ObjectAttributes;
 
-    /* Get the user sid */
-    ptu = GetTokenInfo(NULL, TokenUser);
-    if (!ptu)
-        return NULL;
-
-    /* Create a security descriptor for the port */
-    ZeroMemory(&ea, sizeof(ea));
-    ea[0].grfAccessPermissions = PORT_CONNECT;
-    ea[0].grfAccessMode = SET_ACCESS;
-    ea[0].grfInheritance = NO_INHERITANCE;
-    ea[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
-    ea[0].Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
-    ea[0].Trustee.ptstrName = (LPWSTR)ptu->User.Sid;
-
-    pSD = CreateSecurityDescriptorW(_countof(ea), ea);
-    LocalFree(ptu);
-    if (!pSD)
-        return NULL;
-
-    /* Initialize the object's security attributes */
-    RtlZeroMemory(&sa, sizeof(sa));
-    sa.nLength = sizeof (SECURITY_ATTRIBUTES);
-    sa.lpSecurityDescriptor = pSD;
-    sa.bInheritHandle = FALSE;
-
-    ServerName = WUSTR_AppendLogonSessionW(NULL, SERVER_NAME);
-    if (ServerName)
-    {
-        /* Create the server port */
-        hPort = CreateWaitablePortW(&sa,
-                                    ServerName,
-                                    0,
-                                    sizeof(NSNOTIFY_REQUEST),
-                                    0);
-        WUSTR_SetPtrW(&ServerName, NULL);
-    }
-
-    LocalFree(pSD);
-    return hPort;
+    InitializeObjectAttributes(&ObjectAttributes, NULL, 0, 0, NULL);
+    return NtOpenProcess(&Connection->ProcessHandle,
+                         PROCESS_DUP_HANDLE | PROCESS_VM_OPERATION | PROCESS_VM_WRITE,
+                         &ObjectAttributes,
+                         &Request->PortMessage.u3.ClientId);
 }
 
-typedef ULONG (*PREQUEST_HANDLER)(PNSNOTIFY_CONNECTION, PNSNOTIFY_REQUEST);
+static
+NTSTATUS
+NTAPI
+HandleConnectionCleanup(
+    _Inout_ struct _LPCSERVER *Server,
+    _In_opt_ PNSNOTIFY_REQUEST Request,
+    _Inout_ PNSNOTIFY_CONNECTION Connection
+    )
+{
+    /* Uninitialize the notifications this client has asked for */
+    UninitNotificationsByMask(Connection->Types);
 
+    NtClose(Connection->ProcessHandle);
+
+    if (Connection->ThreadHandle)
+    {
+        NtClose(Connection->ThreadHandle);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+typedef NTSTATUS(*PREQUEST_HANDLER)(PNSNOTIFY_CONNECTION, PNSNOTIFY_REQUEST);
 static const PREQUEST_HANDLER Handlers[] =
 {
     Handshake,
     Register,
     Unregister
 };
+
+static
+NTSTATUS
+NTAPI
+HandleRequest(
+    _Inout_ struct _LPCSERVER *Server,
+    _In_opt_ PNSNOTIFY_REQUEST Request,
+    _Inout_ PNSNOTIFY_CONNECTION Connection
+    )
+{
+    if (Request->u1.Type < RTL_NUMBER_OF(Handlers))
+    {
+        Request->u1.Status = Handlers[Request->u1.Type](Connection, Request);
+    }
+    else
+    {
+        Request->u1.Status = STATUS_INVALID_PARAMETER;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+HandleClientDied(
+    _Inout_ struct _LPCSERVER *Server,
+    _In_opt_ PNSNOTIFY_REQUEST Request,
+    _Inout_ PNSNOTIFY_CONNECTION Connection
+    )
+{
+    DispatchNotification(NotifyThreadDied,
+                         (ULONG_PTR)Request->PortMessage.u3.ClientId.UniqueThread,
+                         0,
+                         0,
+                         0);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+InitializeServer(
+    VOID
+    )
+{
+    NTSTATUS Status;
+    UNICODE_STRING PortName;
+
+    /* Embed the session id with the base port name */
+    Status = RtlGetNamedObjectDirectoryName(&PortName, &LpcServerName, NULL, TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    LpcServer.Size = sizeof(LpcServer);
+    LpcServer.Timeout = &RtlTimeout30Sec;
+    LpcServer.MaxDataLength = sizeof(NSNOTIFY_REQUEST);
+    LpcServer.ConnectionLength = sizeof(NSNOTIFY_CONNECTION);
+    LpcServer.NewConnection = (PLPC_EVENT)HandleNewConnection;
+    LpcServer.ConnectionCleanup = (PLPC_EVENT)HandleConnectionCleanup;
+    LpcServer.Request = (PLPC_EVENT)HandleRequest;
+    LpcServer.ClientDied = (PLPC_EVENT)HandleClientDied;
+    
+    return LpcInitializeServer(&LpcServer, &PortName, LpcDefaultPortAccess, 0);
+}
 
 C_ASSERT(_countof(Handlers) == NOTIFY_MAX);
 
@@ -405,141 +429,17 @@ WinMain(
     _In_ int nCmdShow
     )
 {
-    HANDLE hServerPort;
-    NSNOTIFY_REQUEST request;
-    PNSNOTIFY_CONNECTION Connection;
-    DWORD timeout;
-    HANDLE ConnectionPortHandle;
+    NTSTATUS Status;
 
     hInst = hInstance;
 
-    RtlInitializeRefEntryList(&EntryList);
-
-    /* Initialize a wait manager instance */
-    hWaitManager = WmCreateManager();
-    if (!hWaitManager)
-        return GetLastError();
-
-    /* Initialize the server port */
-    hServerPort = CreateServerPort();
-    if (!hServerPort)
-        return GetLastError();
-
-    timeout = IsDebuggerPresent() ? INFINITE : 30000;
-
-    for (;;)
+    Status = InitializeServer();
+    if (NT_SUCCESS(Status))
     {
-        if (!ReplyWaitReceivePortEx(hServerPort,
-                                    (PVOID *)&Connection,
-                                    NULL,
-                                    &request.PortMessage,
-                                    timeout))
-        {
-            return GetLastError();
-        }
-
-        switch (request.PortMessage.u2.Type)
-        {
-        case LPC_CONNECTION_REQUEST:
-
-            /* Allocate a new client entry */
-            Connection = ALLOC(sizeof(NSNOTIFY_CONNECTION));
-
-            /*
-             * Accept the connection - this will result with a null handle if
-             * the above allocation has failed
-             */
-            ConnectionPortHandle = AcceptConnectPort(Connection,
-                                                     &request.PortMessage,
-                                                     Connection != NULL,
-                                                     NULL,
-                                                     NULL);
-            if (ConnectionPortHandle)
-            {
-                /* Initial the client */
-                Connection->hPort = ConnectionPortHandle;
-                Connection->Types = NotifyNone;
-                Connection->ProcessHandle = 0;
-                if (CompleteConnectPort(ConnectionPortHandle))
-                {
-                    /*
-                     * The entry is ready - insert it and wait for the next
-                     * message
-                     */
-                    RtlInsertRefEntry(&EntryList, &Connection->RefEntry);
-                    ConnectionCount++;
-
-                    /* From now on we won't specify timeout */
-                    timeout = INFINITE;
-                    continue;
-                }
-
-                CloseHandle(ConnectionPortHandle);
-            }
-
-            /* If we're here then something has went wrong */
-            if (Connection)
-            {
-                FREE(Connection);
-            }
-            continue;
-
-        case LPC_PORT_CLOSED:
-
-            /* Remove the entry */
-            RtlRemoveRefEntry(&Connection->RefEntry);
-
-            /* Uninitialize the notifications this client has asked for */
-            UninitNotificationsByMask(Connection->Types);
-
-            /* Cleanup... */
-            if (Connection->ThreadHandle)
-            {
-                NtClose(Connection->ThreadHandle);
-            }
-
-            if (Connection->ProcessHandle)
-            {
-                NtClose(Connection->ProcessHandle);
-            }
-
-            NtClose(Connection->hPort);
-            FREE(Connection);
-
-            /* Decrement the number of clients */
-            if (--ConnectionCount)
-            {
-                /* we still have clients connected! */
-                continue;
-            }
-
-            /* The last client has disconnected - exit the process */
-            return ERROR_SUCCESS;
-
-        case LPC_REQUEST:
-            if (request.u1.Type >= 0 && request.u1.Type < _countof(Handlers))
-            {
-                request.u1.Status = Handlers[request.u1.Type](Connection, &request);
-            }
-            else
-            {
-                request.u1.Status = ERROR_INVALID_FUNCTION;
-            }
-
-            ReplyPort(hServerPort, &request.PortMessage);
-            continue;
-
-        case LPC_CLIENT_DIED:
-            DispatchNotification(NotifyThreadDied,
-                                 (ULONG_PTR)request.PortMessage.u3.ClientId.UniqueThread,
-                                 0,
-                                 0,
-                                 0);
-            continue;
-
-        default:
-            break;
-        }
+        Status = LpcListen(&LpcServer, FALSE);
+        FinalizeServer(&LpcServer);
     }
+
+    return Status;
 }
 

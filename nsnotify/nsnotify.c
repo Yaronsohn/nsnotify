@@ -9,20 +9,19 @@
 #include <windows.h>
 #include "..\ntfysvr\notify.h"
 #include <imgbase.h>
-#include <ntrtl.h>
-#include <ntextapi.h>
-#include <winutils.h>
-#include <nsutils.h>
+#include <ntrtlu.h>
 
 /* GLOBALS ********************************************************************/
 
+static const UNICODE_STRING LpcServerName = RTL_CONSTANT_STRING(L"\\" SERVER_NAME);
 static RTL_REFENTRY_LIST EntryList = { 0 };
 static HANDLE PortHandle = 0;
-static const WCHAR ServerName[] =
-    { 'N', 'T', 'F', 'Y', 'S', 'V', 'R', '.', 'E', 'X', 'E', 0 };
+static const UNICODE_STRING ServerFileName = RTL_CONSTANT_STRING(L"ntfysvr.exe");
 static HANDLE NotifyThreadHandle = 0;
 static BOOL Terminated = FALSE;
-
+#ifndef _WIN64
+static ULONG_PTR Wow64 = 0;
+#endif
 /* FUNCTIONS ******************************************************************/
 
 typedef struct _NSNOTIFY_CONNECTION {
@@ -50,6 +49,14 @@ DllMain(
     {
     case DLL_PROCESS_ATTACH:
 
+#ifndef _WIN64
+        ZwQueryInformationProcess(NtCurrentProcess(),
+                                  ProcessWow64Information,
+                                  &Wow64,
+                                  sizeof(Wow64),
+                                  NULL);
+#endif
+
         /* Disable thread attached/detached notifications */
         LdrDisableThreadCalloutsForDll(hinstDLL);
 
@@ -73,19 +80,23 @@ static
 BOOL
 StartServer(VOID)
 {
-    PWCHAR ntfysvr;
-    BOOL success;
+    UNICODE_STRING FilePath;
+    BOOL Success;
     STARTUPINFOW si = { 0 };
     PROCESS_INFORMATION pi = { 0 };
+    NTSTATUS Status;
 
-    ntfysvr = PrependModulePathW((HMODULE)&__ImageBase, ServerName);
-    if (!ntfysvr)
-        return GetLastError();
+    Status = RtlPrependModulePath(RTL_DUPLICATE_UNICODE_STRING_NULL_TERMINATE | RTL_DUPLICATE_UNICODE_STRING_ALLOCATE_NULL_STRING,
+                                  (HMODULE)&__ImageBase,
+                                  &ServerFileName,
+                                  &FilePath);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
 
     /* Start the server */
     si.cb = sizeof(si);
-    success = CreateProcessW(NULL,
-                             ntfysvr,
+    Success = CreateProcessW(NULL,
+                             FilePath.Buffer,
                              NULL,
                              NULL,
                              FALSE,
@@ -94,41 +105,52 @@ StartServer(VOID)
                              NULL,
                              &si,
                              &pi);
-    LocalFree(ntfysvr);
-    if (success)
+    RtlFreeUnicodeString(&FilePath);
+    if (Success)
     {
         NtClose(pi.hProcess);
         NtClose(pi.hThread);
     }
 
-    return success;
+    return Success;
 }
 
 static
 BOOL
 ConnectToServer(VOID)
 {
-    ULONG MaxMsgSize = sizeof(NSNOTIFY_REQUEST);
+    NTSTATUS Status;
+    UNICODE_STRING PortName;
+    ULONG MaxMsgLength;
     ULONG attempts;
-    PWCHAR ServerName;
+    static const SECURITY_QUALITY_OF_SERVICE Qos =
+    {
+        sizeof(SECURITY_QUALITY_OF_SERVICE),
+        SecurityImpersonation,
+        SECURITY_DYNAMIC_TRACKING,
+        FALSE
+    };
 
-    ServerName = WUSTR_AppendLogonSessionW(NULL, SERVER_NAME);
-    if (!ServerName)
-        return FALSE;
+    /* Embed the session id with the base port name */
+    Status = RtlGetNamedObjectDirectoryName(&PortName, &LpcServerName, NULL, TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
+    MaxMsgLength = sizeof(NSNOTIFY_REQUEST);
     attempts = 0;
     do
     {
         /* Try to connect to the server */
-        PortHandle = SecureConnectPortW(ServerName,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        &MaxMsgSize,
-                                        NULL,
-                                        NULL);
-        if (PortHandle)
+        Status = NtSecureConnectPort(&PortHandle,
+                                     &PortName,
+                                     (PSECURITY_QUALITY_OF_SERVICE)&Qos,
+                                     NULL,
+                                     NULL,
+                                     NULL,
+                                     &MaxMsgLength,
+                                     NULL,
+                                     NULL);
+        if (NT_SUCCESS(Status))
             break;
 
         if ((attempts % 10) == 0)
@@ -151,8 +173,6 @@ ConnectToServer(VOID)
         NtDelayExecution(FALSE, (PLARGE_INTEGER)&RtlTimeout200MSec);
 
     } while (attempts < 30);
-
-    WUSTR_SetPtrW(&ServerName, NULL);
 
     return PortHandle != 0;
 }
@@ -202,13 +222,11 @@ static
 DWORD
 CALLBACK
 NotificationThreadProc(
-    __reserved PVOID Parameter
+    _Reserved_ PVOID Parameter
     )
 {
     for (;;)
     {
-        CURRENT_THREAD_NAME("Notification Server Thread");
-
         if (Terminated)
         {
             NtTerminateThread(NtCurrentThread(), 0);
@@ -219,28 +237,34 @@ NotificationThreadProc(
 }
 
 static
-BOOL
+NTSTATUS
 CallServer(
     _Inout_ PNSNOTIFY_REQUEST Request
     )
 {
+    NTSTATUS Status;
+
     Request->PortMessage.u1.TotalLength = sizeof(NSNOTIFY_REQUEST);
     Request->PortMessage.u2.ZeroInit = 0;
 
-    if (!RequestWaitReplyPort(PortHandle,
-                              &Request->PortMessage,
-                              &Request->PortMessage))
+#ifndef _WIN64
+    ThunkMsg32ToMsg64(&Request->PortMessage, Wow64);
+#endif
+
+    Status = NtRequestWaitReplyPort(PortHandle,
+                                    &Request->PortMessage,
+                                    &Request->PortMessage);
+
+#ifndef _WIN64
+    ThunkMsg64ToMsg32(&Request->PortMessage, Wow64);
+#endif
+
+    if (NT_SUCCESS(Status))
     {
-        return FALSE;
+        Status = Request->u1.Status;
     }
 
-    if (Request->u1.Status)
-    {
-        RtlSetLastWin32Error(Request->u1.Status);
-        return FALSE;
-    }
-
-    return TRUE;
+    return Status;
 }
 
 static
@@ -252,6 +276,7 @@ InitializeServer(
 {
     BOOLEAN Success = FALSE;
     NSNOTIFY_REQUEST request;
+    NTSTATUS Status;
 
     if (Init)
     {
@@ -267,31 +292,31 @@ InitializeServer(
         Terminated = FALSE;
 
         /* Create the dispatcher thread */
-        if (!NT_SUCCESS(RtlCreateUserThread(NtCurrentProcess(),
-                                            NULL,
-                                            TRUE,
-                                            0,
-                                            0,
-                                            0,
-                                            NotificationThreadProc,
-                                            NULL,
-                                            &NotifyThreadHandle,
-                                            NULL)))
-        {
+        Status = RtlCreateUserThread(NtCurrentProcess(),
+                                     NULL,
+                                     TRUE,
+                                     0,
+                                     0,
+                                     0,
+                                     NotificationThreadProc,
+                                     NULL,
+                                     &NotifyThreadHandle,
+                                     NULL);
+        if (!NT_SUCCESS(Status))
             goto cleanup1;
-        }
 
         request.u1.Type = NOTIFY_HANDSHAKE;
         request.u2.Handshake.Routine = NotificationAPC;
         request.u2.Handshake.ThreadHandle = NotifyThreadHandle;
 
-        if (!CallServer(&request))
+        Status = CallServer(&request);
+        if (!NT_SUCCESS(Status))
         {
             /*
              * We need to terminate the notification thread - since we've kept
              * it suspended we can simply terminate it
              */
-            NtTerminateThread(NotifyThreadHandle, GetLastError());
+            NtTerminateThread(NotifyThreadHandle, Status);
             goto cleanup2;
         }
 
@@ -317,7 +342,7 @@ InitializeServer(
                          NULL,
                          NULL);
 
-        WaitForSingleObject(NotifyThreadHandle, INFINITE);
+        NtWaitForSingleObject(NotifyThreadHandle, FALSE, NULL);
     }
 
 cleanup2:
@@ -349,7 +374,7 @@ InitGeneric(
         request.u1.Type = NOTIFY_REGISTER;
         request.u2.Register.Type = InitEntry->Type;
 
-        Success = CallServer(&request);
+        Success = NT_SUCCESS(CallServer(&request));
     }
     else
     {
@@ -390,13 +415,11 @@ RegisterNotificationRoutine(
 {
     PNSNOTIFY_CONNECTION Connection;
     int i;
+    NTSTATUS Status;
 
     /* Make sure the caller has asked for at least one notification */
     if ((Type & NotifyAll) == 0)
-    {
-        RtlSetLastWin32Error(ERROR_INVALID_PARAMETER);
         return NULL;
-    }
 
     /* Allocate an entry */
     Connection = ALLOC(sizeof(NSNOTIFY_CONNECTION));
@@ -414,7 +437,8 @@ RegisterNotificationRoutine(
     {
         if (InitArr[i].Type & Type)
         {
-            if (!InitArr[i].InitRoutine(TRUE, &InitArr[i]))
+            Status = InitArr[i].InitRoutine(TRUE, &InitArr[i]);
+            if (!NT_SUCCESS(Status))
             {
                 while (i--)
                 {
@@ -446,7 +470,19 @@ UnregisterNotificationRoutine(
 
     if (Connection->Signature != CONNECTION_TAG)
     {
-        RtlRaiseStatus(ERROR_INVALID_PARAMETER);
+        if (NtCurrentPeb()->BeingDebugged)
+        {
+            EXCEPTION_RECORD ExceptionRecord;
+
+            ExceptionRecord.ExceptionAddress = _ReturnAddress();
+            ExceptionRecord.ExceptionCode = STATUS_INVALID_PARAMETER;
+            ExceptionRecord.ExceptionFlags = 0;
+            ExceptionRecord.ExceptionRecord = NULL;
+            ExceptionRecord.NumberParameters = 0;
+
+            RtlRaiseException(&ExceptionRecord);
+        }
+
         return;
     }
 
