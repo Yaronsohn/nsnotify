@@ -10,10 +10,11 @@
 #include "..\ntfysvr\notify.h"
 #include <imgbase.h>
 #include <ntrtlu.h>
+#include <lpccs.h>
 
 /* GLOBALS ********************************************************************/
 
-static const UNICODE_STRING LpcServerName = RTL_CONSTANT_STRING(L"\\" SERVER_NAME);
+static const UNICODE_STRING LpcServerName = RTL_CONSTANT_STRING(SERVER_NAME);
 static RTL_REFENTRY_LIST EntryList = { 0 };
 static HANDLE PortHandle = 0;
 static const UNICODE_STRING ServerFileName = RTL_CONSTANT_STRING(L"ntfysvr.exe");
@@ -78,103 +79,25 @@ DllMain(
 
 static
 BOOL
-StartServer(VOID)
+ConnectToServer(VOID)
 {
-    UNICODE_STRING FilePath;
-    BOOL Success;
-    STARTUPINFOW si = { 0 };
-    PROCESS_INFORMATION pi = { 0 };
     NTSTATUS Status;
+    UNICODE_STRING FilePath;
 
     Status = RtlPrependModulePath(RTL_DUPLICATE_UNICODE_STRING_NULL_TERMINATE | RTL_DUPLICATE_UNICODE_STRING_ALLOCATE_NULL_STRING,
                                   (HMODULE)&__ImageBase,
                                   &ServerFileName,
                                   &FilePath);
-    if (!NT_SUCCESS(Status))
-        return FALSE;
-
-    /* Start the server */
-    si.cb = sizeof(si);
-    Success = CreateProcessW(NULL,
-                             FilePath.Buffer,
-                             NULL,
-                             NULL,
-                             FALSE,
-                             0,
-                             NULL,
-                             NULL,
-                             &si,
-                             &pi);
-    RtlFreeUnicodeString(&FilePath);
-    if (Success)
+    if (NT_SUCCESS(Status))
     {
-        NtClose(pi.hProcess);
-        NtClose(pi.hThread);
+        Status = LpcConnectToServer(&PortHandle,
+                                    &FilePath,
+                                    &LpcServerName,
+                                    sizeof(NSNOTIFY_REQUEST));
+        RtlFreeUnicodeString(&FilePath);
     }
 
-    return Success;
-}
-
-static
-BOOL
-ConnectToServer(VOID)
-{
-    NTSTATUS Status;
-    UNICODE_STRING PortName;
-    ULONG MaxMsgLength;
-    ULONG attempts;
-    static const SECURITY_QUALITY_OF_SERVICE Qos =
-    {
-        sizeof(SECURITY_QUALITY_OF_SERVICE),
-        SecurityImpersonation,
-        SECURITY_DYNAMIC_TRACKING,
-        FALSE
-    };
-
-    /* Embed the session id with the base port name */
-    Status = RtlGetNamedObjectDirectoryName(&PortName, &LpcServerName, NULL, TRUE);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    MaxMsgLength = sizeof(NSNOTIFY_REQUEST);
-    attempts = 0;
-    do
-    {
-        /* Try to connect to the server */
-        Status = NtSecureConnectPort(&PortHandle,
-                                     &PortName,
-                                     (PSECURITY_QUALITY_OF_SERVICE)&Qos,
-                                     NULL,
-                                     NULL,
-                                     NULL,
-                                     &MaxMsgLength,
-                                     NULL,
-                                     NULL);
-        if (NT_SUCCESS(Status))
-            break;
-
-        if ((attempts % 10) == 0)
-        {
-            /* In the first attempt we try to start a new server */
-            if (!StartServer())
-                break;
-
-            attempts++;
-        }
-        else
-        {
-            if (!NtCurrentPeb()->BeingDebugged)
-            {
-                attempts++;
-            }
-        }
-
-        /* Try to give the server process time to prepare */
-        NtDelayExecution(FALSE, (PLARGE_INTEGER)&RtlTimeout200MSec);
-
-    } while (attempts < 30);
-
-    return PortHandle != 0;
+    return NT_SUCCESS(Status);
 }
 
 static

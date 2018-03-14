@@ -16,7 +16,7 @@
 
 /* GLOBALS ********************************************************************/
 
-static const UNICODE_STRING LpcServerName = RTL_CONSTANT_STRING(L"\\" SERVER_NAME);
+static const UNICODE_STRING LpcServerName = RTL_CONSTANT_STRING(SERVER_NAME);
 static LPCSERVER LpcServer = { 0 };
 HINSTANCE hInst = NULL;
 
