@@ -73,9 +73,9 @@ typedef struct {
 } NSNOTIFY_REQUEST, *PNSNOTIFY_REQUEST;
 
 #ifdef _WIN64
-#define SERVER_NAME     L"\\NSNOTIFY64"
+#define PORT_NAME       L"\\NSNOTIFY64"
 #else
-#define SERVER_NAME     L"\\NSNOTIFY32"
+#define PORT_NAME       L"\\NSNOTIFY32"
 #endif
 
 extern HWND NotifyHwnd;

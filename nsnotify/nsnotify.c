@@ -14,7 +14,7 @@
 
 /* GLOBALS ********************************************************************/
 
-static const UNICODE_STRING LpcServerName = RTL_CONSTANT_STRING(SERVER_NAME);
+static const UNICODE_STRING PortName = RTL_CONSTANT_STRING(PORT_NAME);
 static RTL_REFENTRY_LIST EntryList = { 0 };
 static HANDLE PortHandle = 0;
 static const UNICODE_STRING ServerFileName = RTL_CONSTANT_STRING(L"ntfysvr.exe");
@@ -90,10 +90,11 @@ ConnectToServer(VOID)
                                   &FilePath);
     if (NT_SUCCESS(Status))
     {
-        Status = LpcConnectToServer(&PortHandle,
-                                    &FilePath,
-                                    &LpcServerName,
-                                    sizeof(NSNOTIFY_REQUEST));
+        Status = LpcConnectToBNOServer(&PortHandle,
+                                       &FilePath,
+                                       &PortName,
+                                       sizeof(NSNOTIFY_REQUEST),
+                                       NULL);
         RtlFreeUnicodeString(&FilePath);
     }
 

@@ -16,7 +16,7 @@
 
 /* GLOBALS ********************************************************************/
 
-static const UNICODE_STRING LpcServerName = RTL_CONSTANT_STRING(SERVER_NAME);
+static const UNICODE_STRING PortName = RTL_CONSTANT_STRING(PORT_NAME);
 static LPCSERVER LpcServer = { 0 };
 HINSTANCE hInst = NULL;
 
@@ -398,14 +398,6 @@ InitializeServer(
     VOID
     )
 {
-    NTSTATUS Status;
-    UNICODE_STRING PortName;
-
-    /* Embed the session id with the base port name */
-    Status = RtlGetNamedObjectDirectoryName(&PortName, &LpcServerName, NULL, TRUE);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
     LpcServer.Size = sizeof(LpcServer);
     LpcServer.Timeout = &RtlTimeout30Sec;
     LpcServer.MaxDataLength = sizeof(NSNOTIFY_REQUEST);
@@ -415,7 +407,7 @@ InitializeServer(
     LpcServer.Request = (PLPC_EVENT)HandleRequest;
     LpcServer.ClientDied = (PLPC_EVENT)HandleClientDied;
     
-    return LpcInitializeServer(&LpcServer, &PortName, LpcDefaultPortAccess, 0);
+    return LpcInitializeBNOServer(&LpcServer, &PortName, NULL, 0);
 }
 
 C_ASSERT(_countof(Handlers) == NOTIFY_MAX);
@@ -437,7 +429,7 @@ WinMain(
     if (NT_SUCCESS(Status))
     {
         Status = LpcListen(&LpcServer, FALSE);
-        FinalizeServer(&LpcServer);
+        LpcFinalizeServer(&LpcServer);
     }
 
     return Status;
