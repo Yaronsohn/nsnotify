@@ -35,9 +35,6 @@ typedef struct _NSNOTIFY_CONNECTION {
 
 #define CONNECTION_TAG  'YFTN'
 
-#define ALLOC(size) RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, size)
-#define FREE(ptr) RtlFreeHeap(RtlGetProcessHeap(), 0, ptr)
-
 BOOL
 WINAPI
 DllMain(
@@ -339,14 +336,15 @@ RegisterNotificationRoutine(
 {
     PNSNOTIFY_CONNECTION Connection;
     int i;
-    NTSTATUS Status;
 
     /* Make sure the caller has asked for at least one notification */
     if ((Type & NotifyAll) == 0)
         return NULL;
 
     /* Allocate an entry */
-    Connection = ALLOC(sizeof(NSNOTIFY_CONNECTION));
+    Connection = RtlAllocateHeap(RtlGetProcessHeap(),
+                                 HEAP_ZERO_MEMORY,
+                                 sizeof(NSNOTIFY_CONNECTION));
     if (!Connection)
         return NULL;
 
@@ -361,8 +359,7 @@ RegisterNotificationRoutine(
     {
         if (InitArr[i].Type & Type)
         {
-            Status = InitArr[i].InitRoutine(TRUE, &InitArr[i]);
-            if (!NT_SUCCESS(Status))
+            if (!InitArr[i].InitRoutine(TRUE, &InitArr[i]))
             {
                 while (i--)
                 {
@@ -372,7 +369,7 @@ RegisterNotificationRoutine(
                     }
                 }
 
-                FREE(Connection);
+                RtlFreeHeap(RtlGetProcessHeap(), 0, Connection);
                 return NULL;
             }
         }
@@ -423,7 +420,7 @@ UnregisterNotificationRoutine(
     }
 
     /* we can now free the entry */
-    FREE(Connection);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Connection);
 }
 
 BOOL
