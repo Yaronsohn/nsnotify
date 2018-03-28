@@ -399,7 +399,7 @@ InitializeServer(
     )
 {
     LpcServer.Size = sizeof(LpcServer);
-    LpcServer.Timeout = &RtlTimeout30Sec;
+    LpcServer.Timeout = &RtlTimeoutNil;
     LpcServer.MaxDataLength = sizeof(NSNOTIFY_REQUEST);
     LpcServer.ConnectionLength = sizeof(NSNOTIFY_CONNECTION);
     LpcServer.NewConnection = (PLPC_EVENT)HandleNewConnection;
