@@ -20,9 +20,7 @@ static HANDLE PortHandle = 0;
 static const UNICODE_STRING ServerFileName = RTL_CONSTANT_STRING(L"ntfysvr.exe");
 static HANDLE NotifyThreadHandle = 0;
 static BOOL Terminated = FALSE;
-#ifndef _WIN64
-static ULONG_PTR Wow64 = 0;
-#endif
+
 /* FUNCTIONS ******************************************************************/
 
 typedef struct _NSNOTIFY_CONNECTION {
@@ -46,14 +44,6 @@ DllMain(
     switch (fdwReason)
     {
     case DLL_PROCESS_ATTACH:
-
-#ifndef _WIN64
-        ZwQueryInformationProcess(NtCurrentProcess(),
-                                  ProcessWow64Information,
-                                  &Wow64,
-                                  sizeof(Wow64),
-                                  NULL);
-#endif
 
         /* Disable thread attached/detached notifications */
         LdrDisableThreadCalloutsForDll(hinstDLL);
@@ -165,21 +155,9 @@ CallServer(
 {
     NTSTATUS Status;
 
-    Request->PortMessage.u1.TotalLength = sizeof(NSNOTIFY_REQUEST);
-    Request->PortMessage.u2.ZeroInit = 0;
-
-#ifndef _WIN64
-    ThunkMsg32ToMsg64(&Request->PortMessage, Wow64);
-#endif
-
-    Status = NtRequestWaitReplyPort(PortHandle,
-                                    &Request->PortMessage,
-                                    &Request->PortMessage);
-
-#ifndef _WIN64
-    ThunkMsg64ToMsg32(&Request->PortMessage, Wow64);
-#endif
-
+    Status = LpcCallServer(PortHandle,
+                           &Request->PortMessage,
+                           sizeof(NSNOTIFY_REQUEST));
     if (NT_SUCCESS(Status))
     {
         Status = Request->u1.Status;
