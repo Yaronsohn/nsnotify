@@ -58,9 +58,7 @@
   <!--Set up parameters according to the subsystem selected-->
   <Import Project="$(SolutionDir)config\PostPropertyGroup.props" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile>
-      <MinimalRebuild>true</MinimalRebuild>
-    </ClCompile>
+    <ClCompile />
     <ResourceCompile>
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>

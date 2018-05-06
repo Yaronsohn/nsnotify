@@ -64,7 +64,6 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PreprocessorDefinitions>_NSNOTIFY_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <MinimalRebuild>true</MinimalRebuild>
     </ClCompile>
     <Link>
       <AdditionalDependencies>ntdll.lib;rtlu.lib;lpcclnt.lib;%(AdditionalDependencies)</AdditionalDependencies>
