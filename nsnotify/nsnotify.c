@@ -364,7 +364,7 @@ UnregisterNotificationRoutine(
     _Inout_ PVOID Routine
     )
 {
-    PNSNOTIFY_CONNECTION Connection = (PNSNOTIFY_CONNECTION) Routine;
+    PNSNOTIFY_CONNECTION Connection = (PNSNOTIFY_CONNECTION)Routine;
     int i;
 
     if (Connection->Signature != CONNECTION_TAG)

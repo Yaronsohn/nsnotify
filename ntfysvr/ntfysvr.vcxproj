@@ -27,22 +27,22 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings" />
@@ -63,18 +63,16 @@
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;probe.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClCompile>
-      <MinimalRebuild>true</MinimalRebuild>
-    </ClCompile>
+    <ClCompile />
     <ResourceCompile>
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;probe.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -85,7 +83,7 @@
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;probe.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -96,7 +94,7 @@
       <PreprocessorDefinitions>_HIVEHLPR_BUILD_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;probe.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntextapi.lib;wtsapi32.lib;rtlu.lib;nsdbg.lib;lpcsrvr.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
